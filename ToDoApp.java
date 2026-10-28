@@ -43,7 +43,14 @@ public class ToDoApp {
                 return;
             }
             try {
-                if (path.equals("/style.css") && exchange.getRequestMethod().equals("GET")) {
+                if (path.equals("/api/tasks/export") && exchange.getRequestMethod().equals("GET")) {
+                    byte[] csv = tasksCsv().getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "text/csv; charset=UTF-8");
+                    exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=\"tasks.csv\"");
+                    exchange.sendResponseHeaders(200, csv.length);
+                    exchange.getResponseBody().write(csv);
+                    exchange.getResponseBody().close();
+                } else if (path.equals("/style.css") && exchange.getRequestMethod().equals("GET")) {
                     byte[] css = Files.readAllBytes(Path.of("web/style.css"));
                     exchange.getResponseHeaders().set("Content-Type", "text/css; charset=UTF-8");
                     exchange.sendResponseHeaders(200, css.length);
@@ -231,6 +238,25 @@ public class ToDoApp {
         return b.append(']').toString();
     }
 
+    private static String tasksCsv() throws SQLException {
+        StringBuilder csv = new StringBuilder("\uFEFF");
+        appendCsvRow(csv, "ID", "完了", "カテゴリ", "タスクの内容", "詳細・実現方法", "優先度", "重要度", "期限日", "入力日", "完了日");
+        for (Map<String, String> task : allTasks()) {
+            appendCsvRow(csv, task.get("id"), "true".equals(task.get("done")) ? "完了" : "未完了",
+                    task.get("category"), task.get("content"), task.get("details"), task.get("priority"),
+                    task.get("importance"), task.get("dueDate"), task.get("createdDate"), task.get("completedDate"));
+        }
+        return csv.toString();
+    }
+
+    private static void appendCsvRow(StringBuilder csv, String... values) {
+        for (int i = 0; i < values.length; i++) {
+            if (i > 0) csv.append(',');
+            String value = values[i] == null ? "" : values[i];
+            csv.append('"').append(value.replace("\"", "\"\"")).append('"');
+        }
+        csv.append("\r\n");
+    }
     private static String categoriesJson() throws SQLException {
         StringBuilder b = new StringBuilder("[");
         boolean first = true;
