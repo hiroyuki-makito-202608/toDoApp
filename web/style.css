@@ -2,3 +2,5 @@
                 .long-text-preview{display:-webkit-box;width:100%;padding:0;background:transparent;color:#35586a;text-align:left;font-size:.86rem;line-height:1.45;font-weight:500;white-space:normal;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;cursor:pointer}.long-text-preview:hover{text-decoration:underline}.content-cell{min-width:220px;max-width:300px}.detail-cell{min-width:240px;max-width:340px}.edit-dialog{width:min(760px,calc(100vw - 28px));max-height:90vh;padding:0;border:1px solid #cde2eb;border-radius:18px;box-shadow:0 24px 70px #244b5c44;color:#274052}.edit-dialog::backdrop{background:#17384777;backdrop-filter:blur(2px)}.edit-dialog form{display:grid;gap:16px;padding:24px}.edit-dialog h2{margin:0;color:#23546a}.edit-dialog label{display:flex;flex-direction:column;gap:7px}.edit-dialog textarea{width:100%;min-height:130px;resize:vertical}.edit-dialog #editDetails{min-height:260px}.dialog-actions{display:flex;justify-content:flex-end;gap:8px}.dialog-actions .cancel{background:#d9e8ed;color:#35586a}
 
 .toolbar-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+td.category-cell{min-width:82px}
+.status-cell{min-width:117px}

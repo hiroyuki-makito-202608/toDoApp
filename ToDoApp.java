@@ -100,7 +100,18 @@ public class ToDoApp {
     private static void initializeDatabase() throws SQLException {
         try (Connection c = connection(); Statement s = c.createStatement()) {
             s.executeUpdate(
-                    "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, done INTEGER NOT NULL DEFAULT 0, category TEXT NOT NULL, content TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT '中', importance TEXT NOT NULL DEFAULT '中', due_date TEXT NOT NULL, created_date TEXT NOT NULL, completed_date TEXT NOT NULL DEFAULT '')");
+                    "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, done INTEGER NOT NULL DEFAULT 0, category TEXT NOT NULL, content TEXT NOT NULL, details TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT '未着手', priority TEXT NOT NULL DEFAULT '中', importance TEXT NOT NULL DEFAULT '中', due_date TEXT NOT NULL, created_date TEXT NOT NULL, completed_date TEXT NOT NULL DEFAULT '')");
+            boolean hasStatus = false;
+            try (ResultSet rs = s.executeQuery("PRAGMA table_info(tasks)")) {
+                while (rs.next()) {
+                    if ("status".equals(rs.getString("name"))) {
+                        hasStatus = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasStatus)
+                s.executeUpdate("ALTER TABLE tasks ADD COLUMN status TEXT NOT NULL DEFAULT '未着手'");
             s.executeUpdate("CREATE TABLE IF NOT EXISTS categories (name TEXT PRIMARY KEY)");
             s.executeUpdate("INSERT OR IGNORE INTO categories(name) VALUES ('雑務'),('学習'),('求職')");
         }
@@ -117,17 +128,18 @@ public class ToDoApp {
         String created = LocalDate.now().toString();
         try (Connection c = connection();
                 PreparedStatement p = c.prepareStatement(
-                        "INSERT INTO tasks(done,category,content,details,priority,importance,due_date,created_date,completed_date) VALUES(?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO tasks(done,category,content,details,status,priority,importance,due_date,created_date,completed_date) VALUES(?,?,?,?,?,?,?,?,?,?)",
                         Statement.RETURN_GENERATED_KEYS)) {
             p.setInt(1, Boolean.parseBoolean(value(d, "done", "false")) ? 1 : 0);
             p.setString(2, category);
             p.setString(3, content);
             p.setString(4, value(d, "details", ""));
-            p.setString(5, value(d, "priority", "中"));
-            p.setString(6, value(d, "importance", "中"));
-            p.setString(7, due);
-            p.setString(8, created);
-            p.setString(9, Boolean.parseBoolean(value(d, "done", "false")) ? value(d, "completedDate", created) : "");
+            p.setString(5, status(d));
+            p.setString(6, value(d, "priority", "中"));
+            p.setString(7, value(d, "importance", "中"));
+            p.setString(8, due);
+            p.setString(9, created);
+            p.setString(10, Boolean.parseBoolean(value(d, "done", "false")) ? value(d, "completedDate", created) : "");
             p.executeUpdate();
             rememberCategory(c, category);
             try (ResultSet rs = p.getGeneratedKeys()) {
@@ -143,16 +155,17 @@ public class ToDoApp {
         boolean done = Boolean.parseBoolean(value(d, "done", "false"));
         try (Connection c = connection();
                 PreparedStatement p = c.prepareStatement(
-                        "UPDATE tasks SET done=?,category=?,content=?,details=?,priority=?,importance=?,due_date=?,completed_date=? WHERE id=?")) {
+                        "UPDATE tasks SET done=?,category=?,content=?,details=?,status=?,priority=?,importance=?,due_date=?,completed_date=? WHERE id=?")) {
             p.setInt(1, done ? 1 : 0);
             p.setString(2, value(d, "category", "雑務"));
             p.setString(3, content);
             p.setString(4, value(d, "details", ""));
-            p.setString(5, value(d, "priority", "中"));
-            p.setString(6, value(d, "importance", "中"));
-            p.setString(7, value(d, "dueDate", ""));
-            p.setString(8, done ? value(d, "completedDate", LocalDate.now().toString()) : "");
-            p.setInt(9, id);
+            p.setString(5, status(d));
+            p.setString(6, value(d, "priority", "中"));
+            p.setString(7, value(d, "importance", "中"));
+            p.setString(8, value(d, "dueDate", ""));
+            p.setString(9, done ? value(d, "completedDate", LocalDate.now().toString()) : "");
+            p.setInt(10, id);
             if (p.executeUpdate() == 0)
                 throw new IllegalArgumentException("タスクが見つかりません。");
             rememberCategory(c, value(d, "category", "雑務"));
@@ -176,13 +189,14 @@ public class ToDoApp {
         String field = value(d, "field", "");
         String column = switch (field) {
             case "category" -> "category";
+            case "status" -> "status";
             case "priority" -> "priority";
             case "importance" -> "importance";
             case "dueDate" -> "due_date";
             case "completedDate" -> "completed_date";
             default -> throw new IllegalArgumentException("この項目は即時保存できません。");
         };
-        String newValue = value(d, "value", "");
+        String newValue = field.equals("status") ? validStatus(value(d, "value", "")) : value(d, "value", "");
         try (Connection c = connection();
                 PreparedStatement p = c.prepareStatement("UPDATE tasks SET " + column + "=? WHERE id=?")) {
             p.setString(1, newValue);
@@ -199,7 +213,7 @@ public class ToDoApp {
         try (Connection c = connection();
                 Statement s = c.createStatement();
                 ResultSet rs = s.executeQuery(
-                        "SELECT id,done,category,content,details,priority,importance,due_date,created_date,completed_date FROM tasks ORDER BY id ASC")) {
+                        "SELECT id,done,category,content,details,status,priority,importance,due_date,created_date,completed_date FROM tasks ORDER BY id ASC")) {
             while (rs.next()) {
                 Map<String, String> r = new LinkedHashMap<>();
                 r.put("id", rs.getString("id"));
@@ -207,6 +221,7 @@ public class ToDoApp {
                 r.put("category", rs.getString("category"));
                 r.put("content", rs.getString("content"));
                 r.put("details", rs.getString("details"));
+                r.put("status", rs.getString("status"));
                 r.put("priority", rs.getString("priority"));
                 r.put("importance", rs.getString("importance"));
                 r.put("dueDate", rs.getString("due_date"));
@@ -240,10 +255,10 @@ public class ToDoApp {
 
     private static String tasksCsv() throws SQLException {
         StringBuilder csv = new StringBuilder("\uFEFF");
-        appendCsvRow(csv, "ID", "完了", "カテゴリ", "タスクの内容", "詳細・実現方法", "優先度", "重要度", "期限日", "入力日", "完了日");
+        appendCsvRow(csv, "ID", "完了", "カテゴリ", "タスクの内容", "詳細・実現方法", "ステータス", "優先度", "重要度", "期限日", "入力日", "完了日");
         for (Map<String, String> task : allTasks()) {
             appendCsvRow(csv, task.get("id"), "true".equals(task.get("done")) ? "完了" : "未完了",
-                    task.get("category"), task.get("content"), task.get("details"), task.get("priority"),
+                    task.get("category"), task.get("content"), task.get("details"), task.get("status"), task.get("priority"),
                     task.get("importance"), task.get("dueDate"), task.get("createdDate"), task.get("completedDate"));
         }
         return csv.toString();
@@ -278,6 +293,16 @@ public class ToDoApp {
             p.setString(1, category);
             p.executeUpdate();
         }
+    }
+
+    private static String status(Map<String, String> data) {
+        return validStatus(value(data, "status", "未着手"));
+    }
+
+    private static String validStatus(String status) {
+        if (!List.of("未着手", "作業中", "一時停止", "ほぼ完了", "完了", "中止").contains(status))
+            throw new IllegalArgumentException("ステータスの値が正しくありません。");
+        return status;
     }
 
     private static Map<String, String> form(HttpExchange e) throws IOException {
