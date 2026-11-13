@@ -4,3 +4,4 @@
 .toolbar-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 td.category-cell{min-width:82px}
 .status-cell{min-width:117px}
+td.date-cell.due-soon input{background:#fff0b3;border-color:#e8ce70}
