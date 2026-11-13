@@ -5,3 +5,7 @@
 td.category-cell{min-width:82px}
 .status-cell{min-width:117px}
 td.date-cell.due-soon input{background:#fff0b3;border-color:#e8ce70}
+th .table-sort,th .filter-toggle{margin-left:5px;padding:3px 6px;background:transparent;color:inherit;font-size:.8rem}
+th .table-sort[aria-pressed="true"]{color:#23546a}
+th .column-filter{display:block;width:100%;margin-top:5px;padding:5px;font-size:.8rem}
+th .column-filter[hidden]{display:none}
