@@ -4,12 +4,13 @@
                 <label>カテゴリ<select name="category" id="category"><option>雑務</option><option>学習</option><option>求職</option><option value="__new__">＋新しいカテゴリ</option></select></label>
                 <label class="wide">タスクの内容<input name="content" required maxlength="300" placeholder="例：書類を整理する"></label>
                 <label class="wide">詳細・実現方法<textarea name="details" rows="1" placeholder="手順やメモ"></textarea></label>
+                <label>ステータス<select name="status"><option selected>未着手</option><option>作業中</option><option>一時停止</option><option>ほぼ完了</option><option>完了</option><option>中止</option></select></label>
                 <label>優先度<select name="priority"><option>高</option><option selected>中</option><option>低</option></select></label>
                 <label>重要度<select name="importance"><option>高</option><option selected>中</option><option>低</option></select></label>
                 <label>期限日<input type="date" name="dueDate" id="dueDate" required></label>
                 <button class="primary" type="submit">タスクを追加</button></div></form><p id="notice" aria-live="polite"></p></section>
-                <section><div class="toolbar"><h2>タスクリスト</h2><div class="toolbar-actions"><label class="toggle"><input type="checkbox" id="hideDone">未完了のみ表示</label><button type="button" id="exportCsv">CSVをダウンロード</button></div></div>
-                <p class="empty" id="empty" hidden>現在、タスクがありません</p><div class="table-wrap"><table><thead><tr><th>完了</th><th>ID</th><th>カテゴリ</th><th>タスクの内容</th><th>詳細・実現方法</th><th>優先度</th><th>重要度</th><th>期限日</th><th>入力日</th><th>完了日</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section></main>
+                <section><div class="toolbar"><h2>タスクリスト</h2><div class="toolbar-actions"><label class="toggle"><input type="checkbox" id="hideDone" checked>未完了のみ表示</label><button type="button" id="exportCsv">CSVをダウンロード</button></div></div>
+                <p class="empty" id="empty" hidden>現在、タスクがありません</p><div class="table-wrap"><table><thead><tr><th>完了</th><th>ID</th><th>カテゴリ</th><th>タスクの内容</th><th>詳細・実現方法</th><th>ステータス</th><th>優先度</th><th>重要度</th><th>期限日</th><th>入力日</th><th>完了日</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section></main>
                 <dialog id="editDialog" class="edit-dialog"><form id="editForm"><h2>タスク内容の編集</h2><label>タスクの内容<textarea id="editContent" rows="4" required></textarea></label><label>詳細・実現方法<textarea id="editDetails" rows="10"></textarea></label><p id="editError" role="alert"></p><div class="dialog-actions"><button type="button" class="cancel" id="cancelEdit">キャンセル</button><button type="submit">変更を保存</button></div></form></dialog>
                 <script>
                 const $=s=>document.querySelector(s), today=new Date(), dateString=d=>{const x=new Date(d.getTime()-d.getTimezoneOffset()*60000);return x.toISOString().slice(0,10)};
@@ -25,11 +26,137 @@
                 $('#editForm').addEventListener('submit',async e=>{e.preventDefault();const dialog=$('#editDialog');const row=[...$('#rows').querySelectorAll('tr')].find(r=>r.dataset.id===dialog.dataset.rowId);if(!row)return;const data=new URLSearchParams();row.querySelectorAll('[data-name]').forEach(el=>data.set(el.dataset.name,el.type==='checkbox'?el.checked:el.value));data.set('content',$('#editContent').value);data.set('details',$('#editDetails').value);try{await request('/api/tasks/'+dialog.dataset.rowId,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:data});dialog.close();$('#notice').textContent='タスクの内容と詳細を保存しました';await load()}catch(error){$('#editError').textContent=error.message}});
                 async function load(){const tasks=await request('/api/tasks');const body=$('#rows');body.replaceChildren();const visible=tasks.filter(t=>!$('#hideDone').checked||t.done!=='true');$('#empty').hidden=tasks.length!==0;visible.forEach(t=>{const tr=document.createElement('tr');tr.dataset.id=t.id;if(t.done==='true')tr.classList.add('done-row');
                 const check=document.createElement('input');check.type='checkbox';check.checked=t.done==='true';check.dataset.name='done';cell(tr,check,'check-cell');const id=document.createElement('span');id.textContent=t.id;cell(tr,id,'id-cell');
-                const categoryControl=field('category',t.category);cell(tr,categoryControl,'category-cell');categoryControl.addEventListener('change',()=>{if(categoryControl.value!=='__new__')saveField(t.id,'category',categoryControl.value)});const contentCell=cell(tr,previewButton(t.content,'内容を編集'),'content-cell');const contentStore=document.createElement('input');contentStore.type='hidden';contentStore.dataset.name='content';contentStore.value=t.content;contentCell.append(contentStore);const detailsCell=cell(tr,previewButton(t.details||'（詳細なし）','詳細を編集'),'detail-cell');const detailsStore=document.createElement('input');detailsStore.type='hidden';detailsStore.dataset.name='details';detailsStore.value=t.details;detailsCell.append(detailsStore);const priorityControl=field('priority',t.priority,'',['高','中','低']);const priorityCell=cell(tr,priorityControl,'priority-cell');const setPriorityColor=()=>priorityCell.classList.toggle('high-priority',priorityControl.value==='高');priorityControl.addEventListener('change',()=>{setPriorityColor();saveField(t.id,'priority',priorityControl.value)});setPriorityColor();const importanceControl=field('importance',t.importance,'',['高','中','低']);const importanceCell=cell(tr,importanceControl,'priority-cell');const setImportanceColor=()=>importanceCell.classList.toggle('high-importance',importanceControl.value==='高');importanceControl.addEventListener('change',()=>{setImportanceColor();saveField(t.id,'importance',importanceControl.value)});setImportanceColor();const dueDate=field('dueDate',t.dueDate,'date');const dueDateCell=cell(tr,dueDate,'date-cell');const updateOverdue=()=>dueDateCell.classList.toggle('overdue',t.done!=='true'&&!!dueDate.value&&dueDate.value<dateString(new Date()));dueDate.addEventListener('change',()=>{updateOverdue();saveField(t.id,'dueDate',dueDate.value)});updateOverdue();const created=document.createElement('span');created.textContent=t.createdDate;cell(tr,created,'date-cell');const completedDate=field('completedDate',t.completedDate,'date');cell(tr,completedDate,'date-cell');completedDate.addEventListener('change',()=>saveField(t.id,'completedDate',completedDate.value));check.addEventListener('change',async()=>{const previousDate=completedDate.value;const todayValue=dateString(new Date());if(check.checked){if(!completedDate.value||todayValue>completedDate.value)completedDate.value=todayValue}else completedDate.value='';check.disabled=true;try{const data=new URLSearchParams({done:String(check.checked),completedDate:completedDate.value});await request('/api/tasks/'+t.id,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:data});$('#notice').textContent=check.checked?'完了として保存しました':'未完了として保存しました';await load()}catch(e){check.checked=!check.checked;completedDate.value=previousDate;$('#notice').textContent=e.message}finally{check.disabled=false}});
+                const categoryControl=field('category',t.category);cell(tr,categoryControl,'category-cell');categoryControl.addEventListener('change',()=>{if(categoryControl.value!=='__new__')saveField(t.id,'category',categoryControl.value)});const contentCell=cell(tr,previewButton(t.content,'内容を編集'),'content-cell');const contentStore=document.createElement('input');contentStore.type='hidden';contentStore.dataset.name='content';contentStore.value=t.content;contentCell.append(contentStore);const detailsCell=cell(tr,previewButton(t.details||'（詳細なし）','詳細を編集'),'detail-cell');const detailsStore=document.createElement('input');detailsStore.type='hidden';detailsStore.dataset.name='details';detailsStore.value=t.details;detailsCell.append(detailsStore);const statusOptions=['未着手','作業中','一時停止','ほぼ完了','完了','中止'];const statusControl=field('status',t.status,'',statusOptions);cell(tr,statusControl,'status-cell');statusControl.addEventListener('change',()=>saveField(t.id,'status',statusControl.value));const priorityControl=field('priority',t.priority,'',['高','中','低']);const priorityCell=cell(tr,priorityControl,'priority-cell');const setPriorityColor=()=>priorityCell.classList.toggle('high-priority',priorityControl.value==='高');priorityControl.addEventListener('change',()=>{setPriorityColor();saveField(t.id,'priority',priorityControl.value)});setPriorityColor();const importanceControl=field('importance',t.importance,'',['高','中','低']);const importanceCell=cell(tr,importanceControl,'priority-cell');const setImportanceColor=()=>importanceCell.classList.toggle('high-importance',importanceControl.value==='高');importanceControl.addEventListener('change',()=>{setImportanceColor();saveField(t.id,'importance',importanceControl.value)});setImportanceColor();const dueDate=field('dueDate',t.dueDate,'date');const dueDateCell=cell(tr,dueDate,'date-cell');const updateOverdue=()=>{const now=new Date(),todayValue=dateString(now),yesterdayValue=dateString(new Date(now.getFullYear(),now.getMonth(),now.getDate()-1)),active=t.done!=='true'&&!!dueDate.value;dueDateCell.classList.toggle('overdue',active&&dueDate.value<yesterdayValue);dueDateCell.classList.toggle('due-soon',active&&dueDate.value>=yesterdayValue&&dueDate.value<=todayValue)};dueDate.addEventListener('change',()=>{updateOverdue();saveField(t.id,'dueDate',dueDate.value)});updateOverdue();const created=document.createElement('span');created.textContent=t.createdDate;cell(tr,created,'date-cell');const completedDate=field('completedDate',t.completedDate,'date');cell(tr,completedDate,'date-cell');completedDate.addEventListener('change',()=>saveField(t.id,'completedDate',completedDate.value));check.addEventListener('change',async()=>{const previousDate=completedDate.value;const todayValue=dateString(new Date());if(check.checked){if(!completedDate.value||todayValue>completedDate.value)completedDate.value=todayValue}else completedDate.value='';check.disabled=true;try{const data=new URLSearchParams({done:String(check.checked),completedDate:completedDate.value});await request('/api/tasks/'+t.id,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:data});$('#notice').textContent=check.checked?'完了として保存しました':'未完了として保存しました';await load()}catch(e){check.checked=!check.checked;completedDate.value=previousDate;$('#notice').textContent=e.message}finally{check.disabled=false}});
                 const save=document.createElement('button');save.textContent='保存';save.onclick=async()=>{try{const data=new URLSearchParams();tr.querySelectorAll('[data-name]').forEach(el=>data.set(el.dataset.name,el.type==='checkbox'?el.checked:el.value));await request('/api/tasks/'+t.id,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:data});$('#notice').textContent='変更を保存しました';await load()}catch(e){$('#notice').textContent=e.message}};const del=document.createElement('button');del.className='delete';del.textContent='削除';del.onclick=async()=>{if(!confirm('このタスクを削除しますか？'))return;await request('/api/tasks/'+t.id,{method:'DELETE'});await load()};const actions=document.createElement('div');actions.className='actions';actions.append(save,del);cell(tr,actions);body.append(tr)});
-                const blank=document.createElement('tr');blank.className='new-row';const hint=document.createElement('td');hint.colSpan=11;hint.className='new-row-hint';hint.textContent='上の入力欄から新しいタスクを追加できます';blank.append(hint);blank.onclick=()=>$('#newTask input[name="content"]').focus();body.append(blank)}
+                const blank=document.createElement('tr');blank.className='new-row';const hint=document.createElement('td');hint.colSpan=12;hint.className='new-row-hint';hint.textContent='上の入力欄から新しいタスクを追加できます';blank.append(hint);blank.onclick=()=>$('#newTask input[name="content"]').focus();body.append(blank)}
                 $('#newTask').addEventListener('submit',async e=>{e.preventDefault();try{const data=new URLSearchParams(new FormData(e.currentTarget));const added=await request('/api/tasks',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:data});sessionStorage.setItem('todo-notice','タスク #'+added.id+' を追加しました');location.reload()}catch(err){$('#notice').textContent=err.message}});
                 $('#hideDone').addEventListener('change',load);$('#exportCsv').addEventListener('click',()=>{window.location.href='/api/tasks/export'});async function categories(){categoryOptions=await request('/api/categories');const sel=$('#category');categoryOptions.forEach(c=>{if(![...sel.options].some(o=>o.value===c)){const o=document.createElement('option');o.value=c;o.textContent=c;sel.insertBefore(o,sel.lastElementChild)}});sel.addEventListener('change',()=>{if(sel.value==='__new__'){const v=prompt('新しいカテゴリ名を入力してください');if(v?.trim()){const name=v.trim();if(!categoryOptions.includes(name))categoryOptions.push(name);const o=document.createElement('option');o.value=name;o.textContent=name;sel.insertBefore(o,sel.lastElementChild);sel.value=o.value}else sel.value='雑務'}})}
                 const previousNotice=sessionStorage.getItem('todo-notice');if(previousNotice){$('#notice').textContent=previousNotice;sessionStorage.removeItem('todo-notice')}
                 categories().then(load).catch(e=>$('#notice').textContent=e.message);
+                </script>
+                <script>
+                (() => {
+                    const body = $('#rows');
+                    const sortColumns = [
+                        { key: 'id', index: 1, title: 'ID' },
+                        { key: 'dueDate', index: 8, title: '期限日' },
+                        { key: 'createdDate', index: 9, title: '入力日' },
+                        { key: 'completedDate', index: 10, title: '完了日' }
+                    ];
+                    const filterColumns = [
+                        { key: 'category', index: 2, title: 'カテゴリ', values: () => categoryOptions },
+                        { key: 'status', index: 5, title: 'ステータス', values: () => ['未着手', '作業中', '一時停止', 'ほぼ完了', '完了', '中止'] },
+                        { key: 'priority', index: 6, title: '優先度', values: () => ['高', '中', '低'] },
+                        { key: 'importance', index: 7, title: '重要度', values: () => ['高', '中', '低'] }
+                    ];
+                    const filters = Object.fromEntries(filterColumns.map(column => [column.key, '']));
+                    const filterControls = {};
+                    let sort = { key: 'id', direction: 1 };
+
+                    for (const column of sortColumns) {
+                        const header = document.querySelector(`thead th:nth-child(${column.index + 1})`);
+                        const title = header.textContent;
+                        const label = document.createElement('span');
+                        label.textContent = title;
+                        const toggle = document.createElement('button');
+                        toggle.type = 'button';
+                        toggle.className = 'table-sort';
+                        toggle.addEventListener('click', () => {
+                            sort = { key: column.key, direction: sort.key === column.key ? -sort.direction : 1 };
+                            updateSortButtons();
+                            applyTableView();
+                        });
+                        header.replaceChildren(label, toggle);
+                        column.button = toggle;
+                    }
+
+                    for (const column of filterColumns) {
+                        const header = document.querySelector(`thead th:nth-child(${column.index + 1})`);
+                        const title = header.textContent;
+                        const toggle = document.createElement('button');
+                        toggle.type = 'button';
+                        toggle.className = 'filter-toggle';
+                        toggle.textContent = title;
+                        toggle.setAttribute('aria-expanded', 'false');
+                        const select = document.createElement('select');
+                        select.className = 'column-filter';
+                        select.hidden = true;
+                        select.setAttribute('aria-label', `${title}で絞り込み`);
+                        select.addEventListener('change', () => {
+                            filters[column.key] = select.value;
+                            applyTableView();
+                        });
+                        toggle.addEventListener('click', () => {
+                            select.hidden = !select.hidden;
+                            toggle.setAttribute('aria-expanded', String(!select.hidden));
+                            if (!select.hidden) select.focus();
+                        });
+                        header.replaceChildren(toggle, select);
+                        filterControls[column.key] = { column, select };
+                    }
+
+                    function updateSortButtons() {
+                        for (const column of sortColumns) {
+                            const active = sort.key === column.key;
+                            column.button.textContent = active ? (sort.direction === 1 ? '▲' : '▼') : '↕';
+                            column.button.setAttribute('aria-label', `${column.title}を${active && sort.direction === 1 ? '降順' : '昇順'}で並べ替え`);
+                            column.button.setAttribute('aria-pressed', String(active));
+                        }
+                    }
+
+                    function refreshFilterOptions(rows) {
+                        for (const { column, select } of Object.values(filterControls)) {
+                            const values = new Set(column.values());
+                            for (const row of rows) {
+                                const value = row.querySelector(`[data-name="${column.key}"]`)?.value;
+                                if (value) values.add(value);
+                            }
+                            const selected = filters[column.key];
+                            select.replaceChildren(new Option('全て', ''), ...[...values].sort((a, b) => a.localeCompare(b, 'ja')).map(value => new Option(value, value)));
+                            if (selected && values.has(selected)) {
+                                select.value = selected;
+                            } else {
+                                filters[column.key] = '';
+                                select.value = '';
+                            }
+                        }
+                    }
+
+                    function sortValue(row, key) {
+                        if (key === 'id') return Number(row.dataset.id);
+                        if (key === 'dueDate') return row.querySelector('[data-name="dueDate"]').value;
+                        if (key === 'createdDate') return row.children[9].textContent;
+                        return row.querySelector('[data-name="completedDate"]').value;
+                    }
+
+                    function applyTableView() {
+                        const rows = [...body.querySelectorAll('tr:not(.new-row)')];
+                        refreshFilterOptions(rows);
+                        for (const row of rows) {
+                            row.hidden = ($('#hideDone').checked && row.querySelector('[data-name="done"]').checked)
+                                || filterColumns.some(column => filters[column.key]
+                                    && row.querySelector(`[data-name="${column.key}"]`).value !== filters[column.key]);
+                        }
+                        rows.sort((a, b) => {
+                            const left = sortValue(a, sort.key);
+                            const right = sortValue(b, sort.key);
+                            if (!left && right) return 1;
+                            if (left && !right) return -1;
+                            const comparison = sort.key === 'id' ? left - right : left.localeCompare(right);
+                            return comparison * sort.direction || Number(a.dataset.id) - Number(b.dataset.id);
+                        });
+                        const blankRow = body.querySelector('.new-row');
+                        for (const row of rows) body.insertBefore(row, blankRow);
+                        const visibleCount = rows.filter(row => !row.hidden).length;
+                        $('#empty').hidden = visibleCount > 0;
+                        if (visibleCount === 0) {
+                            $('#empty').textContent = rows.length === 0 ? '現在、タスクがありません' : '条件に一致するタスクがありません';
+                        }
+                        observer.takeRecords();
+                    }
+
+                    updateSortButtons();
+                    const observer = new MutationObserver(applyTableView);
+                    observer.observe(body, { childList: true });
+                })();
                 </script></body></html>
