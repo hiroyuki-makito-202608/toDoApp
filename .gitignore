@@ -1,3 +1,5 @@
 todo.db
-out/ToDoApp.class
-lib/sqlite-jdbc.jar
+out/
+lib/
+todo.db-shm
+todo.db-wal
